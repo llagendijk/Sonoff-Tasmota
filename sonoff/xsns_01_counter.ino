@@ -17,6 +17,7 @@
   along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+#ifdef USE_COUNTER
 /*********************************************************************************************\
  * Counter sensors (water meters, electricity meters etc.)
 \*********************************************************************************************/
@@ -24,6 +25,14 @@
 #define XSNS_01             1
 
 unsigned long last_counter_timer[MAX_COUNTERS]; // Last counter time in micro seconds
+
+#ifndef ARDUINO_ESP8266_RELEASE_2_3_0       // Fix core 2.5.x ISR not in IRAM Exception
+void CounterUpdate(uint8_t index) ICACHE_RAM_ATTR;
+void CounterUpdate1(void) ICACHE_RAM_ATTR;
+void CounterUpdate2(void) ICACHE_RAM_ATTR;
+void CounterUpdate3(void) ICACHE_RAM_ATTR;
+void CounterUpdate4(void) ICACHE_RAM_ATTR;
+#endif  // ARDUINO_ESP8266_RELEASE_2_3_0
 
 void CounterUpdate(uint8_t index)
 {
@@ -36,8 +45,7 @@ void CounterUpdate(uint8_t index)
       RtcSettings.pulse_counter[index -1]++;
     }
 
-//    snprintf_P(log_data, sizeof(log_data), PSTR("CNTR: Interrupt %d"), index);
-//    AddLog(LOG_LEVEL_DEBUG);
+//    AddLog_P2(LOG_LEVEL_DEBUG, PSTR("CNTR: Interrupt %d"), index);
   }
 }
 
@@ -87,7 +95,7 @@ void CounterInit(void)
 
 #ifdef USE_WEBSERVER
 const char HTTP_SNS_COUNTER[] PROGMEM =
-  "%s{s}" D_COUNTER "%d{m}%s%s{e}";  // {s} = <tr><th>, {m} = </th><td>, {e} = </td></tr>
+  "{s}" D_COUNTER "%d{m}%s%s{e}";  // {s} = <tr><th>, {m} = </th><td>, {e} = </td></tr>
 #endif  // USE_WEBSERVER
 
 void CounterShow(bool json)
@@ -103,16 +111,16 @@ void CounterShow(bool json)
         dtostrfd((double)RtcSettings.pulse_counter[i] / 1000000, 6, counter);
       } else {
         dsxflg++;
-        dtostrfd(RtcSettings.pulse_counter[i], 0, counter);
+        snprintf_P(counter, sizeof(counter), PSTR("%lu"), RtcSettings.pulse_counter[i]);
       }
 
       if (json) {
         if (!header) {
-          snprintf_P(mqtt_data, sizeof(mqtt_data), PSTR("%s,\"COUNTER\":{"), mqtt_data);
+          ResponseAppend_P(PSTR(",\"COUNTER\":{"));
           stemp[0] = '\0';
         }
         header++;
-        snprintf_P(mqtt_data, sizeof(mqtt_data), PSTR("%s%s\"C%d\":%s"), mqtt_data, stemp, i +1, counter);
+        ResponseAppend_P(PSTR("%s\"C%d\":%s"), stemp, i +1, counter);
         strlcpy(stemp, ",", sizeof(stemp));
 #ifdef USE_DOMOTICZ
         if ((0 == tele_period) && (1 == dsxflg)) {
@@ -122,7 +130,7 @@ void CounterShow(bool json)
 #endif  // USE_DOMOTICZ
 #ifdef USE_WEBSERVER
       } else {
-        snprintf_P(mqtt_data, sizeof(mqtt_data), HTTP_SNS_COUNTER, mqtt_data, i +1, counter, (bitRead(Settings.pulse_counter_type, i)) ? " " D_UNIT_SECOND : "");
+        WSContentSend_PD(HTTP_SNS_COUNTER, i +1, counter, (bitRead(Settings.pulse_counter_type, i)) ? " " D_UNIT_SECOND : "");
 #endif  // USE_WEBSERVER
       }
     }
@@ -132,7 +140,7 @@ void CounterShow(bool json)
   }
   if (json) {
     if (header) {
-      snprintf_P(mqtt_data, sizeof(mqtt_data), PSTR("%s}"), mqtt_data);
+      ResponseJsonEnd();
     }
   }
 }
@@ -153,13 +161,16 @@ bool Xsns01(uint8_t function)
       CounterShow(1);
       break;
 #ifdef USE_WEBSERVER
-    case FUNC_WEB_APPEND:
+    case FUNC_WEB_SENSOR:
       CounterShow(0);
       break;
 #endif  // USE_WEBSERVER
     case FUNC_SAVE_BEFORE_RESTART:
+    case FUNC_SAVE_AT_MIDNIGHT:
       CounterSaveState();
       break;
   }
   return result;
 }
+
+#endif  // USE_COUNTER

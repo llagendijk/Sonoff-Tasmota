@@ -32,7 +32,7 @@
 
 #include <TasmotaSerial.h>
 
-TasmotaSerial *PzemSerial = NULL;
+TasmotaSerial *PzemSerial = nullptr;
 
 #define PZEM_VOLTAGE (uint8_t)0xB0
 #define RESP_VOLTAGE (uint8_t)0xA0
@@ -169,6 +169,7 @@ void PzemEvery200ms(void)
   if (data_ready) {
     float value = 0;
     if (PzemRecieve(pzem_responses[pzem_read_state], &value)) {
+      energy_data_valid = 0;
       switch (pzem_read_state) {
         case 1:  // Voltage as 230.2V
           energy_voltage = value;

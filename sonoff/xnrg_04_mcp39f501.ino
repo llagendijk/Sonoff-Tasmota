@@ -67,7 +67,7 @@
 #define MCP_BUFFER_SIZE         60
 
 #include <TasmotaSerial.h>
-TasmotaSerial *McpSerial = NULL;
+TasmotaSerial *McpSerial = nullptr;
 
 typedef struct mcp_cal_registers_type {
   uint16_t gain_current_rms;
@@ -92,7 +92,7 @@ typedef struct mcp_cal_registers_type {
   uint16_t accumulation_interval;
 } mcp_cal_registers_type;
 
-char *mcp_buffer = NULL;
+char *mcp_buffer = nullptr;
 unsigned long mcp_window = 0;
 unsigned long mcp_kWhcounter = 0;
 uint32_t mcp_system_configuration = 0x03000000;
@@ -469,6 +469,7 @@ void McpParseData(void)
     energy_active_power = 0;
     energy_current = 0;
   }
+  energy_data_valid = 0;
 }
 
 /********************************************************************************************/
@@ -526,6 +527,13 @@ void McpSerialInput(void)
 
 void McpEverySecond(void)
 {
+  if (energy_data_valid > ENERGY_WATCHDOG) {
+    mcp_voltage_rms = 0;
+    mcp_current_rms = 0;
+    mcp_active_power = 0;
+    mcp_line_frequency = 0;
+  }
+
   if (mcp_active_power) {
     energy_kWhtoday_delta += ((mcp_active_power * 10) / 36);
     EnergyUpdateToday();
@@ -652,13 +660,13 @@ int Xnrg04(uint8_t function)
   }
   else if (XNRG_04 == energy_flg) {
     switch (function) {
-      case FUNC_INIT:
-        McpSnsInit();
-        break;
       case FUNC_LOOP:
         if (McpSerial) { McpSerialInput(); }
         break;
-      case FUNC_EVERY_SECOND:
+      case FUNC_INIT:
+        McpSnsInit();
+        break;
+      case FUNC_ENERGY_EVERY_SECOND:
         if (McpSerial) { McpEverySecond(); }
         break;
       case FUNC_COMMAND:
